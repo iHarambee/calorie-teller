@@ -48,6 +48,8 @@ body{margin:0;background:var(--base);color:var(--ink);font:16px/1.5 -apple-syste
 .mr .bar{height:8px;border-radius:999px;background:var(--track);overflow:hidden}
 .mr .bar i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#3a7bea,#2a62d8);transition:width .6s cubic-bezier(.2,.8,.2,1)}
 .mr .bar i.over{background:linear-gradient(90deg,#ff9a6b,#ff453a)}
+.srch{display:flex;gap:8px;align-items:flex-end}.srch label{flex:1}
+#qres{border-radius:20px;overflow:hidden}#qres:empty,#qstat:empty{display:none}
 .macnote{font-size:12.5px;color:var(--mute);margin:10px 6px 0;text-align:center}
 .linkbtn{display:block;margin:6px auto 0;padding:8px 12px;background:none;border:0;color:var(--red);font:600 14px system-ui,sans-serif;cursor:pointer}
 @media(prefers-reduced-motion:reduce){.mr .bar i{transition:none}}
@@ -142,6 +144,9 @@ textarea:focus,input:focus,select:focus,button:focus-visible{outline:2.5px solid
     <b id="pft" style="font-size:18px">Nieuw product</b>
     <label for="pf" class="btn photo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Lees een etiket van een foto</label>
     <input type="file" id="pf" accept="image/*" hidden>
+    <div class="srch"><label>Zoek online (Open Food Facts)<input id="qs" type="search" autocomplete="off" placeholder="Bijv. dekamarkt witte bolen, of barcode"></label><button class="btn ghost" id="qgo" type="button">Zoek</button></div>
+    <p class="note" id="qstat" style="margin:0"></p>
+    <div id="qres"></div>
     <label>Naam<input id="pn" placeholder="Bijv. pistoletje"></label>
     <label>Winkel of merk (optioneel)<input id="pw" list="stores" autocomplete="off" placeholder="Bijv. Appie, DekaMarkt"></label>
     <datalist id="stores"></datalist>
@@ -348,13 +353,46 @@ async function ask(){
     if(!its.length)throw 0;pending=pending.concat(its);unknown=[];renderPrev();
   }catch(e){renderPrev();$('#mhint').textContent=aiErr(e)}
 }
-let fNut=null;
+let fNut=null,qlist=[];
+/* Zoeken in Open Food Facts (gratis, geen sleutel nodig). Op naam via cgi/search.pl, op barcode via api/v2/product. */
+const OFFF='code,product_name,brands,quantity,serving_quantity,nutriments';
+const nf=(n,k)=>n[k]!=null&&n[k]!==''&&isFinite(+n[k])?Math.round(+n[k]*10)/10:null;
+function offItem(p){const n=p&&p.nutriments||{},kcal=nf(n,'energy-kcal_100g');if(!p||!p.product_name||kcal==null)return null;
+  const per100={kcal:Math.round(kcal)};
+  for(const [k,key] of [['eiwit','proteins_100g'],['koolhydraten','carbohydrates_100g'],['suikers','sugars_100g'],['vet','fat_100g'],['verzadigd','saturated-fat_100g'],['vezels','fiber_100g'],['zout','salt_100g']]){const v=nf(n,key);if(v!=null)per100[k]=v}
+  return {code:String(p.code||''),name:String(p.product_name).trim().slice(0,60),brand:String(p.brands||'').split(',')[0].trim(),qty:String(p.quantity||''),serving:+p.serving_quantity>0?Math.round(+p.serving_quantity):0,per100}}
+async function offGet(url){
+  for(let t=0;t<2;t++){
+    try{const r=await fetch(url);if(r.ok)return await r.json();if(r.status===404)return null}catch(e){}
+    await new Promise(ok=>setTimeout(ok,900))}
+  throw {code:'busy'}}
+async function offSearch(q){
+  if(navigator.onLine===false)throw {code:'offline'};
+  if(/^\d{8,14}$/.test(q)){const j=await offGet('https://world.openfoodfacts.org/api/v2/product/'+q+'.json?fields='+OFFF);return j&&j.status===1&&j.product?[j.product]:[]}
+  const j=await offGet('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=15&fields='+OFFF);
+  return j&&Array.isArray(j.products)?j.products:[]}
+function renderQ(){$('#qres').innerHTML=qlist.map((r,i)=>`<button class="pl" data-q="${i}"><span>${esc(r.name)}${r.brand?' ('+esc(r.brand)+')':''}<small>${esc([r.code,r.qty].filter(Boolean).join(' · '))}</small></span><span class="k">${fmt(r.per100.kcal)} <small>kcal per 100 g</small></span></button>`).join('')}
+$('#qgo').onclick=async()=>{
+  const q=$('#qs').value.trim()||($('#pw').value+' '+$('#pn').value).trim();
+  if(!q){$('#qstat').textContent='Typ eerst een productnaam of een barcode.';return}
+  $('#qstat').textContent='Zoeken…';$('#qres').innerHTML='';qlist=[];$('#qgo').disabled=true;
+  try{const raw=await offSearch(q);qlist=raw.map(offItem).filter(Boolean);const hid=raw.length-qlist.length;
+    $('#qstat').textContent=qlist.length?'Bron: Open Food Facts (ingevuld door gebruikers). Check het met de verpakking.'+(hid?' '+hid+' zonder voedingswaarden niet getoond.':''):(raw.length?'Wel gevonden, maar zonder voedingswaarden. Vul het zelf in.':'Niets gevonden. Probeer kortere woorden, bijv. “dekamarkt bolen”, of een barcode.');
+    renderQ()}
+  catch(e){$('#qstat').textContent=e&&e.code==='offline'?'Geen internet. Zoeken werkt alleen online.':'Open Food Facts is even druk of niet bereikbaar. Probeer het straks nog eens.'}
+  $('#qgo').disabled=false};
+$('#qs').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#qgo').click()}});
+$('#qres').onclick=e=>{const b=e.target.closest('[data-q]');if(!b)return;const r=qlist[+b.dataset.q];if(!r)return;
+  fNut={per100:r.per100};setMacF(fNut);$('#pn').value=r.name;if(!$('#pw').value.trim()&&r.brand)$('#pw').value=r.brand;
+  $('#pu').value='100g';$('#pk').value=r.per100.kcal;$('#pg').value=r.serving||'';showNut();
+  $('#pft').textContent='Gevonden. Klopt het? Pas aan en sla op';$('#pcancel').hidden=false;
+  $('#qres').innerHTML='';qlist=[];$('#qstat').textContent='Ingevuld per 100 g. Liever per stuk? Kies “stuk / portie” en vul gram per stuk in.';window.scrollTo(0,0)};
 const NL={eiwit:'eiwit',koolhydraten:'koolhydraten',suikers:'waarvan suikers',vet:'vet',verzadigd:'waarvan verzadigd',vezels:'vezels',zout:'zout'};
 const dec=n=>String(Math.round(n*10)/10).replace('.',',');
 function showNut(){const n=fNut&&fNut.per100;if(!n){$('#nut').hidden=true;return}$('#nut').hidden=false;
   $('#nut').innerHTML='<b>Per 100 g'+(+n.kcal?': '+fmt(n.kcal)+' kcal':'')+'</b>'+Object.keys(NL).filter(k=>n[k]!=null&&isFinite(+n[k])).map(k=>esc(NL[k])+' '+dec(+n[k])+' g').join(' · ')}
 const setMacF=n=>{const v=n&&n.per100||{};$('#pe').value=v.eiwit??'';$('#pv').value=v.vet??'';$('#pc').value=v.koolhydraten??''};
-function openForm(p,name){editId=p?p.id:null;$('#pft').textContent=p?'Product bewerken':'Nieuw product';$('#pn').value=p?p.name:(name||'');$('#pk').value=p?p.kcal:'';$('#pu').value=p?p.unit:'stuk';$('#pg').value=p&&p.grams?p.grams:'';$('#pa').value=p?(p.aliases||[]).join(', '):'';fNut=p&&p.nutr?p.nutr:null;setMacF(fNut);$('#pw').value=p?p.store||'':'';showNut();$('#pdel').hidden=!p;$('#pcancel').hidden=!p&&!name}
+function openForm(p,name){$('#qres').innerHTML='';$('#qstat').textContent='';$('#qs').value='';qlist=[];editId=p?p.id:null;$('#pft').textContent=p?'Product bewerken':'Nieuw product';$('#pn').value=p?p.name:(name||'');$('#pk').value=p?p.kcal:'';$('#pu').value=p?p.unit:'stuk';$('#pg').value=p&&p.grams?p.grams:'';$('#pa').value=p?(p.aliases||[]).join(', '):'';fNut=p&&p.nutr?p.nutr:null;setMacF(fNut);$('#pw').value=p?p.store||'':'';showNut();$('#pdel').hidden=!p;$('#pcancel').hidden=!p&&!name}
 function autoK(){const k100=fNut&&fNut.per100&&+fNut.per100.kcal,g=+$('#pg').value;if(!k100)return;if($('#pu').value==='stuk'&&g>0)$('#pk').value=Math.round(k100*g/100);else if($('#pu').value==='100g')$('#pk').value=Math.round(k100)}
 $('#pg').oninput=autoK;$('#pu').onchange=autoK;
 const shrink=f=>new Promise((ok,no)=>{const u=URL.createObjectURL(f),im=new Image();im.onload=()=>{const s=Math.min(1,1400/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>b?ok(b):no(0),'image/jpeg',.85)};im.onerror=()=>{URL.revokeObjectURL(u);no(0)};im.src=u});

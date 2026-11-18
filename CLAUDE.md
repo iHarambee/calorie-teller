@@ -14,6 +14,7 @@ Functies die er nu in zitten:
 - **Spraak:** via `webkitSpeechRecognition` (nl-NL). Werkt dat niet, dan gebruikt hij de microfoon van het iOS-toetsenbord.
 - **Eigen producten:** naam, kcal per stuk of per 100 g, gram per stuk, andere namen. Er staan standaardproducten in, met geschatte waarden.
 - **Foto van een etiket:** Claude leest de voedingswaarden en slaat het product op met voedingswaarden per 100 g.
+- **Zoek online (zonder API-sleutel):** in het productformulier zoekt de knop "Zoek" in Open Food Facts op naam (`cgi/search.pl`, bijv. "dekamarkt witte bolen") of op barcode (`api/v2/product/<ean>`). Een resultaat vult naam, winkel, kcal en macro's per 100 g in. Let op: de data komt van gebruikers, dekking is wisselend (niet elk product staat erin) en Open Food Facts geeft bij snel achter elkaar zoeken soms tijdelijk een 503 (zonder CORS-header). De app probeert twee keer en toont dan een melding. `search.openfoodfacts.org` heeft geen CORS en werkt niet vanuit de browser.
 - **Schatten van onbekend eten:** via Claude, met de optie om het als product te bewaren.
 - **Dagweergave:** ring met resterende kcal, een "bon" van de dag (verwijderen en ongedaan maken), een balkje per dag voor de afgelopen 7 dagen, en navigatie per dag.
 - **Snelknoppen** voor de meest gebruikte producten, en een instelbaar dagdoel (standaard 2000).
