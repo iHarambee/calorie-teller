@@ -48,6 +48,11 @@ body{margin:0;background:var(--base);color:var(--ink);font:16px/1.5 -apple-syste
 .mr .bar{height:8px;border-radius:999px;background:var(--track);overflow:hidden}
 .mr .bar i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#3a7bea,#2a62d8);transition:width .6s cubic-bezier(.2,.8,.2,1)}
 .mr .bar i.over{background:linear-gradient(90deg,#ff9a6b,#ff453a)}
+.pr{display:flex;align-items:center;gap:6px;padding-right:10px;border-bottom:1px solid var(--line);background:var(--glass);-webkit-backdrop-filter:blur(20px) saturate(180%);backdrop-filter:blur(20px) saturate(180%)}
+.pr:last-child{border:0}
+.pr .pe{flex:1;display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 6px 12px 16px;border:0;background:none;color:var(--ink);font:16px system-ui,sans-serif;text-align:left;cursor:pointer}
+.pr small{color:var(--mute);display:block;font-size:13px}
+.pr .eat{flex:none;width:40px;height:40px;font-size:22px;color:var(--red)}
 .srch{display:flex;gap:8px;align-items:flex-end}.srch label{flex:1}
 #qres{border-radius:20px;overflow:hidden}#qres:empty,#qstat:empty{display:none}
 .macnote{font-size:12.5px;color:var(--mute);margin:10px 6px 0;text-align:center}
@@ -311,7 +316,10 @@ function renderWeek(){
   $('#week').innerHTML=ds.map((d,i)=>`<div class="wb${i===6?' cur':''}"><span>${tot[i]?fmt(tot[i]):''}</span><i class="${tot[i]>S.goal?'over':''}" style="height:${(tot[i]/mx*80).toFixed(0)}%"></i><span>${d.toLocaleDateString('nl-NL',{weekday:'short'}).slice(0,2)}</span></div>`).join('');
 }
 function renderChips(){
-  const top=S.products.slice().sort((a,b)=>(b.uses||0)-(a.uses||0)).slice(0,8);
+  // 5 meest gebruikte + 3 recent toegevoegde of gebruikte, zodat een nieuw product meteen een snelknop heeft
+  const top5=S.products.slice().sort((a,b)=>(b.uses||0)-(a.uses||0)).slice(0,5);
+  const recent=S.products.filter(p=>!top5.includes(p)).sort((a,b)=>Math.max(b.last||0,b.added||0)-Math.max(a.last||0,a.added||0)).slice(0,3);
+  const top=top5.concat(recent);
   $('#chips').innerHTML=top.map(p=>`<button class="chip" data-chip="${esc(p.id)}">+ ${esc(p.name)}${p.store?' ('+esc(p.store)+')':''}</button>`).join('');
 }
 function labelOf(i){const s=i.store?` (${i.store})`:'';return i.unit==='100g'?`${fmt(i.qty)} g ${i.name}${s}`:`${String(+(+i.qty).toFixed(2)).replace('.',',')}× ${i.name}${s}`}
@@ -326,7 +334,7 @@ function renderPrev(){
 function renderProducts(){
   const q=norm($('#ps').value.trim());
   const L=S.products.filter(p=>!q||norm(p.name+' '+(p.store||'')+' '+(p.aliases||[]).join(' ')).includes(q)).sort((a,b)=>a.name.localeCompare(b.name,'nl'));
-  $('#plist').innerHTML=L.map(p=>`<button class="pl" data-edit="${esc(p.id)}"><span>${esc(p.name)}${p.store?' ('+esc(p.store)+')':''}<small>${(p.aliases||[]).length?'ook: '+esc(p.aliases.join(', ')):''}${p.est?' · geschat':''}${p.nutr?' · met voedingswaarden':''}</small></span><span class="k">${fmt(p.kcal)} <small>per ${p.unit==='100g'?'100 g':'stuk'}</small></span></button>`).join('')||'<p class="empty">Geen producten gevonden.</p>';
+  $('#plist').innerHTML=L.map(p=>`<div class="pr"><button class="pe" data-edit="${esc(p.id)}"><span>${esc(p.name)}${p.store?' ('+esc(p.store)+')':''}<small>${(p.aliases||[]).length?'ook: '+esc(p.aliases.join(', ')):''}${p.est?' · geschat':''}${p.nutr?' · met voedingswaarden':''}</small></span><span class="k">${fmt(p.kcal)} <small>per ${p.unit==='100g'?'100 g':'stuk'}</small></span></button><button class="sq eat" data-eat="${esc(p.id)}" aria-label="Eet ${esc(p.name)} vandaag" title="Toevoegen aan vandaag">+</button></div>`).join('')||'<p class="empty">Geen producten gevonden.</p>';
 }
 function renderKey(){$('#kstat').textContent=hasAI()?'Er is een sleutel ingesteld.':'Nog geen sleutel ingesteld.';$('#key').value=''}
 function renderAll(){renderTop();renderBon();renderWeek();renderChips();renderPrev();renderProducts();$('#goal').value=S.goal;$('#gp').value=S.mgoals.eiwit||'';$('#gf').value=S.mgoals.vet||'';$('#gc').value=S.mgoals.koolhydraten||'';
@@ -431,7 +439,12 @@ $('#prev').onclick=e=>{const t=e.target;
   else if(t.id==='addp'){const nm=unknown[0]||'';tab('prod');openForm(null,nm.replace(/^\d+([.,]\d+)?\s*/,''));$('#pk').focus()}
   else if(t.id==='se')saveEst=t.checked};
 $('#ps').oninput=renderProducts;
-$('#plist').onclick=e=>{const b=e.target.closest('[data-edit]');if(!b)return;openForm(S.products.find(p=>p.id===b.dataset.edit));window.scrollTo(0,0)};
+$('#plist').onclick=e=>{
+  const eat=e.target.closest('[data-eat]');
+  if(eat){const p=S.products.find(p=>p.id===eat.dataset.eat);if(!p)return;
+    pending.push({pid:p.id,name:p.name,store:p.store||'',unit:p.unit,per:p.kcal,qty:p.unit==='100g'?100:1,alts:[]});
+    tab('dag');renderPrev();return}
+  const b=e.target.closest('[data-edit]');if(!b)return;openForm(S.products.find(p=>p.id===b.dataset.edit));window.scrollTo(0,0)};
 $('#psave').onclick=()=>{const name=$('#pn').value.trim(),kcal=Math.round(+$('#pk').value);if(!name||$('#pk').value===''||!(kcal>=0)){$('#pft').textContent='Vul een naam en calorieën in';return}
   const per100={...(fNut&&fNut.per100||{})};
   for(const [id,k] of [['pe','eiwit'],['pv','vet'],['pc','koolhydraten']]){const v=$('#'+id).value;if(v!==''&&isFinite(+v)&&+v>=0)per100[k]=+v;else delete per100[k]}
@@ -439,7 +452,7 @@ $('#psave').onclick=()=>{const name=$('#pn').value.trim(),kcal=Math.round(+$('#p
   if(hasM&&!(+per100.kcal>0)){const g=+$('#pg').value;if($('#pu').value==='100g'&&kcal>0)per100.kcal=kcal;else if(g>0&&kcal>0)per100.kcal=Math.round(kcal/g*1000)/10}
   const warn=hasM&&!(+per100.kcal>0)?'Opgeslagen. Vul gram per stuk in, anders tellen eiwit, vet en koolhydraten niet mee.':'';
   const d={name,store:$('#pw').value.trim(),kcal,unit:$('#pu').value,aliases:$('#pa').value.split(',').map(s=>s.trim()).filter(Boolean),grams:+$('#pg').value>0?+$('#pg').value:null,nutr:Object.keys(per100).length?{per100}:null};
-  if(editId){const p=S.products.find(p=>p.id===editId);if(p){Object.assign(p,d);delete p.est}}else S.products.push({id:'p'+uid(),uses:0,...d});
+  if(editId){const p=S.products.find(p=>p.id===editId);if(p){Object.assign(p,d);delete p.est}}else S.products.push({id:'p'+uid(),uses:0,added:Date.now(),...d});
   save();openForm(null);renderAll();toastMsg(name+' opgeslagen');if(warn)$('#pft').textContent=warn;
   if(unknown.length&&$('#ta').value.trim()){pending=[];unknown=[];run()}};
 $('#pcancel').onclick=()=>openForm(null);
