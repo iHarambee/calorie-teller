@@ -21,7 +21,7 @@ Functies die er nu in zitten:
 
 ## Bestanden
 - `index.html` — de hele app (CSS + JS in één bestand). De parser staat tussen de markers `/*P*/ … /*/P*/`.
-- `sw.js` — service worker, netwerk eerst en anders de cache. **Verhoog de cachenaam `C` (nu `kcal-v9`) bij elke release.**
+- `sw.js` — service worker, netwerk eerst en anders de cache. **Verhoog de cachenaam `C` (nu `kcal-v10`) bij elke release.**
 - `manifest.json`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` — de PWA-gegevens en iconen.
 - `test-parser.mjs` — snelle test van de parser: `node test-parser.mjs`.
 
@@ -35,6 +35,16 @@ Functies die er nu in zitten:
 - Jordy wil eerst zonder geld werken. Daarom zijn de Claude-API (etiketfoto lezen, eten schatten) en het API-sleutelscherm **verwijderd** (v9). Alles gaat handmatig, plus de gratis "Zoek online" via Open Food Facts.
 - Geen camerafuncties meer (foto van een etiket, barcode scannen). Bouw dat niet terug zonder dat Jordy erom vraagt.
 - Producten worden handmatig ingevuld of via "Zoek online". De oude `kcal-key` in localStorage wordt niet meer gebruikt.
+
+## Standaardproducten en bronnen (v10, `defv: 2`)
+De standaardlijst (`DEF` in `index.html`) heeft nu gram per stuk en voedingswaarden per 100 g. `migrateDefaults()` zet die op een bestaande telefoon alleen op standaardproducten die Jordy niet zelf heeft aangepast (zelfde kcal als vroeger, geen winkel, geen eigen `nutr`) en voegt olijfolie en havermout toe als hij die nog niet heeft.
+Herkomst, zodat je weet hoe hard de cijfers zijn:
+- **USDA FoodData Central (SR Legacy, publiek domein), opgehaald:** ei hardgekookt 155 kcal/12,6 g eiwit/10,6 g vet/1,1 g kh; olijfolie 884 kcal (100 g vet); banaan 89 kcal; rijst gekookt 130 kcal; cola 42 kcal per 100 ml. Koolhydraten zijn "by difference" min vezels, zodat ze overeenkomen met Nederlandse etiketten (daar zitten vezels er niet in).
+- **Nederlandse winkelproducten (Open Food Facts, mediaan van NL-producten) als controle:** pindakaas ca. 625 kcal, jong belegen kaas ca. 375 kcal, halfvolle melk ca. 48 kcal. Havermout: gemiddelde van Quaker, AH en PLUS-etiketten (ca. 372 kcal/100 g droog). De medianen voor bolletjes, brood, ham, kwark en kipfilet waren te rommelig (ook smaakjes en beleg).
+- **Richtwaarden door mij gekozen, niet opgezocht:** bolletjes (wit 270, volkoren 245 kcal per 100 g, 55 g per stuk), boterham (235 kcal per 100 g, 35 g per snee), plak ham, magere kwark, kipfilet, appel (52 kcal), gram per stuk, en de eetlepel olijfolie (14 g).
+- **Zonder voedingswaarden gelaten:** koffie met melk, kroket, kant-en-klaarmaaltijd (niet te verifiëren). Ze tellen niet mee voor eiwit, vet en koolhydraten.
+- NEVO (RIVM) is bewust niet gebruikt: het downloaden gaat via een formulier met voorwaarden, en hergebruik mag alleen ongewijzigd met bronvermelding.
+- De USDA-testsleutel `DEMO_KEY` heeft maar 10 aanvragen per uur.
 
 ## Ontwerp
 - Stijl in de geest van Apple's Liquid Glass: kaarten met `backdrop-filter` (blur + saturate), een lichtrandje via een `::before`-laag, een zwevende glazen tabbalk onderaan en ronde knoppen.

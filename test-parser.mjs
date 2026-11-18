@@ -19,6 +19,8 @@ const cases = [
   ['anderhalve kroket', ['1.5x kroket'], []],
   ['een koffie met melk plus 2 plakken ham', ['1x koffie met melk', '2x plak ham'], []],
   ['ik had een kapsalon en een blikje cola', ['1x blikje cola'], ['kapsalon']],
+  ['een eetlepel olijfolie en 40 gram havermout', ['1x eetlepel olijfolie', '40x havermout'], []],
+  ['3 eieren en 2 witte bolletjes', ['3x ei', '2x bolletje'], []],
   // winkels
   ['twee sneetjes brood van de appie', ['2x brood (Appie)'], [], WINKELS],
   ['2 brood van dekamarkt', ['2x brood (DekaMarkt)'], [], WINKELS],

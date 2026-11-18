@@ -198,7 +198,30 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const fmt=n=>Math.round(+n||0).toLocaleString('nl-NL');
 const uid=()=>Math.random().toString(36).slice(2,10);
 /*P*/
-const DEF=[["bolletje",150,"stuk","bol,broodje,wit bolletje,witte bol"],["volkoren bolletje",140,"stuk","bruin bolletje,bruine bol"],["boterham",85,"stuk","sneetje brood,snee brood,brood"],["ei",75,"stuk","gekookt ei,gebakken ei"],["plak kaas",75,"stuk","kaas,plakje kaas"],["plak ham",25,"stuk","ham"],["pindakaas",90,"stuk","portie pindakaas"],["banaan",105,"stuk",""],["appel",60,"stuk",""],["glas melk",115,"stuk","melk"],["koffie met melk",20,"stuk","koffie"],["blikje cola",140,"stuk","cola"],["kroket",250,"stuk",""],["magere kwark",58,"100g","kwark"],["kipfilet",110,"100g","kip"],["rijst",130,"100g","gekookte rijst"],["kant-en-klaarmaaltijd",500,"stuk","magnetronmaaltijd,maaltijd"]].map((d,i)=>({id:'p'+i,name:d[0],kcal:d[1],unit:d[2],aliases:d[3]?d[3].split(','):[],uses:0}));
+/* Standaardproducten: [naam, kcal per stuk of per 100 g, eenheid, andere namen, gram per stuk, voedingswaarden per 100 g].
+   Waarden zijn gemiddelden/richtwaarden (bronnen in CLAUDE.md). Zonder voedingswaarden tellen ze niet mee voor eiwit, vet en koolhydraten. */
+const N=(kcal,eiwit,vet,koolhydraten,x)=>({per100:{kcal,eiwit,vet,koolhydraten,...(x||{})}});
+const DEF=[
+["bolletje",148,"stuk","bol,broodje,wit bolletje,witte bol",55,N(270,9,2,52)],
+["volkoren bolletje",135,"stuk","bruin bolletje,bruine bol",55,N(245,10,2.5,42)],
+["boterham",82,"stuk","sneetje brood,snee brood,brood",35,N(235,9.5,2,43)],
+["ei",78,"stuk","gekookt ei,gebakken ei",50,N(155,12.6,10.6,1.1,{verzadigd:3.3})],
+["plak kaas",74,"stuk","kaas,plakje kaas",20,N(370,24.5,30,0)],
+["plak ham",23,"stuk","ham",20,N(115,19,4,1)],
+["pindakaas",94,"stuk","portie pindakaas",15,N(625,26,50,12)],
+["banaan",105,"stuk","",118,N(89,1.1,0.3,20.2)],
+["appel",73,"stuk","",140,N(52,0.3,0.2,11.4)],
+["glas melk",120,"stuk","melk",250,N(48,3.5,1.6,4.7)],
+["koffie met melk",20,"stuk","koffie"],
+["blikje cola",139,"stuk","cola",330,N(42,0,0,10.4)],
+["kroket",250,"stuk",""],
+["magere kwark",58,"100g","kwark",null,N(58,10,0.2,4)],
+["kipfilet",110,"100g","kip",null,N(110,23,1.8,0)],
+["rijst",130,"100g","gekookte rijst",null,N(130,2.7,0.3,27.8)],
+["kant-en-klaarmaaltijd",500,"stuk","magnetronmaaltijd,maaltijd"],
+["eetlepel olijfolie",124,"stuk","olijfolie,olie,lepel olijfolie",14,N(884,0,100,0,{verzadigd:13.8})],
+["havermout",372,"100g","havervlokken,haver",null,N(372,11,7,60)]
+].map((d,i)=>{const p={id:'p'+i,name:d[0],kcal:d[1],unit:d[2],aliases:d[3]?d[3].split(','):[],uses:0};if(d[4])p.grams=d[4];if(d[5])p.nutr=d[5];return p});
 const NUM={een:1,twee:2,drie:3,vier:4,vijf:5,zes:6,zeven:7,acht:8,negen:9,tien:10,elf:11,twaalf:12,half:.5,halve:.5,anderhalf:1.5,anderhalve:1.5};
 const FILL=new Set('hey hee hoi ik heb hebben had net nu zojuist gegeten gedronken op opgegeten gehad genomen zet dit dat in de het mijn dag dagcalorie dagcalorieen calorieen calorie kcal vandaag toevoegen voeg toe aan graag even ook paar stuk stuks a wel van bij uit'.split(' '));
 const norm=s=>String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
@@ -253,15 +276,27 @@ function macrosOf(i,p){const n=p&&p.nutr&&p.nutr.per100;if(!n)return null;
   return Object.keys(m).length?m:null}
 /*/P*/
 const normG=g=>{const o={eiwit:0,vet:0,koolhydraten:0};if(g&&typeof g==='object')for(const k in o){const v=Math.round(+g[k]);if(v>0&&v<=2000)o[k]=v}return o};
-const S={products:DEF.map(p=>({...p})),goal:2000,mgoals:normG(),days:{}};
+const S={products:DEF.map(p=>({...p})),goal:2000,mgoals:normG(),defv:2,days:{}};
 const valid=c=>c&&Array.isArray(c.products)&&c.products.every(p=>p&&typeof p.name==='string'&&isFinite(+p.kcal));
-try{const c=JSON.parse(localStorage.getItem('kcal-v1')||'null');if(valid(c)){S.products=c.products;S.goal=+c.goal||2000;S.mgoals=normG(c.mgoals);S.days=c.days&&typeof c.days==='object'?c.days:{}}}catch(e){}
+try{const c=JSON.parse(localStorage.getItem('kcal-v1')||'null');if(valid(c)){S.products=c.products;S.goal=+c.goal||2000;S.mgoals=normG(c.mgoals);S.defv=+c.defv||1;S.days=c.days&&typeof c.days==='object'?c.days:{}}}catch(e){}
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 let pending=[],unknown=[],cur=new Date(),editId=null,undoFn=null,tt=null,listening=false,rec=null;
 const dk=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const today=()=>dk(new Date());
 const dayList=k=>Array.isArray(S.days[k])?S.days[k]:[];
 const save=()=>{try{localStorage.setItem('kcal-v1',JSON.stringify(S))}catch(e){toastMsg('Opslaan mislukt: geheugen vol?')}};
+/* Zet de nieuwe standaardwaarden (v2) op standaardproducten die je zelf niet hebt aangepast, en voeg nieuwe standaardproducten toe. */
+const OLDK={p0:150,p1:140,p2:85,p3:75,p4:75,p5:25,p6:90,p7:105,p8:60,p9:115,p10:20,p11:140,p12:250,p13:58,p14:110,p15:130,p16:500};
+function migrateDefaults(){
+  if((S.defv||1)>=2)return false;let ch=false;
+  for(const d of DEF){
+    const p=S.products.find(x=>x.id===d.id&&norm(x.name)===norm(d.name));
+    if(p){if(d.nutr&&!p.nutr&&!p.store&&OLDK[d.id]===p.kcal){p.kcal=d.kcal;if(d.grams)p.grams=d.grams;p.nutr=d.nutr;ch=true}}
+    else if(+d.id.slice(1)>=17){
+      const namen=[d.name,...d.aliases].map(norm);
+      if(!S.products.some(x=>namen.includes(norm(x.name)))){S.products.push({...d,id:S.products.some(x=>x.id===d.id)?'p'+uid():d.id});ch=true}}
+  }
+  S.defv=2;return ch}
 
 function renderTop(){
   const k=dk(cur),eaten=dayList(k).reduce((a,e)=>a+(+e.kcal||0),0),left=S.goal-eaten,t=today();
@@ -409,12 +444,12 @@ $('#gsave').onclick=()=>{const g=Math.round(+$('#goal').value);
   $('#gstat').textContent='';S.goal=g;S.mgoals=normG({eiwit:+$('#gp').value,vet:+$('#gf').value,koolhydraten:+$('#gc').value});save();renderAll();
   $('#gsave').textContent='Opgeslagen';setTimeout(()=>$('#gsave').textContent='Opslaan',1500)};
 $('#goaledit').onclick=()=>tab('inst');
-const backup=()=>JSON.stringify({app:'calorie-teller',v:1,goal:S.goal,mgoals:S.mgoals,products:S.products,days:S.days});
+const backup=()=>JSON.stringify({app:'calorie-teller',v:1,goal:S.goal,mgoals:S.mgoals,defv:S.defv,products:S.products,days:S.days});
 $('#exp').onclick=()=>{try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([backup()],{type:'application/json'}));a.download='calorieteller-backup-'+today()+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)}catch(e){$('#istat').textContent='Opslaan lukte niet; gebruik Kopieer.'}};
 $('#copy').onclick=()=>{navigator.clipboard.writeText(backup()).then(()=>$('#istat').textContent='Gekopieerd. Plak het bijv. in Notities.',()=>$('#istat').textContent='Kopiëren lukte niet.')};
 function restore(txt){try{const c=JSON.parse(txt);if(!valid(c))throw 0;
   if($('#impgo').dataset.sure!=='1'){$('#impgo').dataset.sure='1';$('#istat').textContent='Dit vervangt je huidige gegevens. Tik nog een keer om door te gaan.';pendingImport=txt;return}
-  $('#impgo').dataset.sure='';S.products=c.products;S.goal=+c.goal||2000;S.mgoals=normG(c.mgoals);S.days=c.days&&typeof c.days==='object'?c.days:{};save();renderAll();$('#imp').value='';$('#istat').textContent='Teruggezet: '+c.products.length+' producten, '+Object.keys(S.days).length+' dagen.';pendingImport=null}
+  $('#impgo').dataset.sure='';S.products=c.products;S.goal=+c.goal||2000;S.mgoals=normG(c.mgoals);S.defv=+c.defv||1;migrateDefaults();S.days=c.days&&typeof c.days==='object'?c.days:{};save();renderAll();$('#imp').value='';$('#istat').textContent='Teruggezet: '+c.products.length+' producten, '+Object.keys(S.days).length+' dagen.';pendingImport=null}
   catch(e){$('#istat').textContent='Dit is geen geldige back-up.'}}
 let pendingImport=null;
 $('#impgo').onclick=()=>restore(pendingImport||$('#imp').value);
@@ -433,6 +468,7 @@ $('#mic').onclick=()=>{
 };
 if(!SR)$('#mhint').textContent='Typ wat je at, of tik op de microfoon van je toetsenbord en zeg het.';
 
+{const was=S.defv;if(migrateDefaults()||was!==S.defv)save()}
 renderAll();
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
