@@ -135,7 +135,7 @@ textarea:focus,input:focus,select:focus,button:focus-visible{outline:2.5px solid
     <div class="say"><textarea id="ta" placeholder="Bijv. 3 bolletjes en 3 eieren" aria-label="Wat heb je gegeten?"></textarea>
       <button class="mic" id="mic" aria-label="Inspreken"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button></div>
     <p class="hint" id="mhint">Tik op de blauwe microfoon en zeg wat je at. Typen kan ook.</p>
-    <div class="row"><button class="btn red" id="go">Verwerk</button><label for="pf" class="btn ghost photo">Nieuw product via foto</label></div>
+    <div class="row"><button class="btn red" id="go">Verwerk</button></div>
     <div id="prev"></div>
     <div class="chips" id="chips"></div>
   </div>
@@ -147,8 +147,6 @@ textarea:focus,input:focus,select:focus,button:focus-visible{outline:2.5px solid
 <section id="t-prod" hidden>
   <div class="card f">
     <b id="pft" style="font-size:18px">Nieuw product</b>
-    <label for="pf" class="btn photo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Lees een etiket van een foto</label>
-    <input type="file" id="pf" accept="image/*" hidden>
     <div class="srch"><label>Zoek online (Open Food Facts)<input id="qs" type="search" autocomplete="off" placeholder="Bijv. dekamarkt witte bolen, of barcode"></label><button class="btn ghost" id="qgo" type="button">Zoek</button></div>
     <p class="note" id="qstat" style="margin:0"></p>
     <div id="qres"></div>
@@ -181,13 +179,6 @@ textarea:focus,input:focus,select:focus,button:focus-visible{outline:2.5px solid
     <p class="note" style="margin:0">Laat eiwit, vet of koolhydraten leeg als je daar geen doel voor wilt.</p>
     <button class="btn red" id="gsave">Opslaan</button>
     <p class="note" id="gstat" style="margin:0"></p>
-  </div>
-  <h2>Claude voor foto's en schattingen</h2>
-  <div class="card f">
-    <p style="margin:0">Voor het lezen van etiketten en het schatten van onbekend eten gebruikt de app Claude. Daarvoor is een eigen API-sleutel nodig (console.anthropic.com). De sleutel blijft alleen op deze telefoon. Zonder sleutel werkt de rest gewoon.</p>
-    <label>API-sleutel<input id="key" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
-    <div class="row" style="margin:0"><button class="btn red" id="ksave">Opslaan en testen</button><button class="btn ghost" id="kdel">Wissen</button></div>
-    <p class="note" id="kstat"></p>
   </div>
   <h2>Back-up</h2>
   <div class="card f">
@@ -266,25 +257,11 @@ const S={products:DEF.map(p=>({...p})),goal:2000,mgoals:normG(),days:{}};
 const valid=c=>c&&Array.isArray(c.products)&&c.products.every(p=>p&&typeof p.name==='string'&&isFinite(+p.kcal));
 try{const c=JSON.parse(localStorage.getItem('kcal-v1')||'null');if(valid(c)){S.products=c.products;S.goal=+c.goal||2000;S.mgoals=normG(c.mgoals);S.days=c.days&&typeof c.days==='object'?c.days:{}}}catch(e){}
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
-let pending=[],unknown=[],cur=new Date(),editId=null,undoFn=null,tt=null,saveEst=true,listening=false,rec=null;
-const getKey=()=>{try{return localStorage.getItem('kcal-key')||''}catch(e){return''}};
-const hasAI=()=>!!getKey();
+let pending=[],unknown=[],cur=new Date(),editId=null,undoFn=null,tt=null,listening=false,rec=null;
 const dk=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const today=()=>dk(new Date());
 const dayList=k=>Array.isArray(S.days[k])?S.days[k]:[];
 const save=()=>{try{localStorage.setItem('kcal-v1',JSON.stringify(S))}catch(e){toastMsg('Opslaan mislukt: geheugen vol?')}};
-
-async function ai(prompt,image,model){
-  const key=getKey();if(!key)throw{code:'no_key'};if(navigator.onLine===false)throw{code:'offline'};
-  const content=[];
-  if(image){const b64=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]);r.onerror=no;r.readAsDataURL(image)});content.push({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}})}
-  content.push({type:'text',text:prompt});
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:model||'claude-haiku-5-5',max_tokens:800,messages:[{role:'user',content}]})});
-  if(!r.ok)throw{code:r.status===401?'bad_key':r.status===429?'rate_limited':r.status===400?'bad_request':'http',status:r.status};
-  const j=await r.json();const text=(j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('');
-  return JSON.parse((text.match(/\{[\s\S]*\}/)||['{}'])[0]);
-}
-const aiErr=e=>({no_key:'Stel eerst een API-sleutel in bij Instellingen.',offline:'Geen internet. Dit werkt alleen online.',bad_key:'De API-sleutel klopt niet. Check hem bij Instellingen.',rate_limited:'Claude is even druk. Probeer het zo opnieuw.'}[e&&e.code]||'Dat lukte niet. Probeer het opnieuw.');
 
 function renderTop(){
   const k=dk(cur),eaten=dayList(k).reduce((a,e)=>a+(+e.kcal||0),0),left=S.goal-eaten,t=today();
@@ -325,18 +302,16 @@ function renderChips(){
 function labelOf(i){const s=i.store?` (${i.store})`:'';return i.unit==='100g'?`${fmt(i.qty)} g ${i.name}${s}`:`${String(+(+i.qty).toFixed(2)).replace('.',',')}× ${i.name}${s}`}
 function renderPrev(){
   if(!pending.length&&!unknown.length){$('#prev').innerHTML='';return}
-  const tot=pending.reduce((a,i)=>a+kcalOf(i),0),est=pending.some(i=>i.est);
-  $('#prev').innerHTML=`<div class="prev">${pending.map((i,n)=>`<div class="it"><div class="n">${esc(labelOf(i))}<small>${fmt(i.per)} kcal per ${i.unit==='100g'?'100 g':'stuk'}${i.est?' · geschat door Claude':''}${i.alts&&i.alts.length?' · ⇄ = andere winkel':''}</small></div>${i.alts&&i.alts.length?`<button class="sq" data-swap="${n}" aria-label="Andere winkel">⇄</button>`:''}<div class="step"><button class="sq" data-dec="${n}" aria-label="Minder">−</button><button class="sq" data-inc="${n}" aria-label="Meer">+</button></div><span class="k">${fmt(kcalOf(i))}</span><button class="x" data-rm="${n}" aria-label="Weghalen">×</button></div>`).join('')}
-  ${unknown.length?`<div class="unk">Niet herkend: <b>${unknown.map(esc).join('</b>, <b>')}</b><div class="row">${hasAI()?'<button class="btn" id="ask">Laat Claude schatten</button>':''}<button class="btn ghost" id="addp">Zelf als product toevoegen</button></div></div>`:''}
-  ${est?`<label class="hint" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="se" style="width:20px;height:20px" ${saveEst?'checked':''}> Geschatte items ook als product bewaren</label>`:''}
+  const tot=pending.reduce((a,i)=>a+kcalOf(i),0);
+  $('#prev').innerHTML=`<div class="prev">${pending.map((i,n)=>`<div class="it"><div class="n">${esc(labelOf(i))}<small>${fmt(i.per)} kcal per ${i.unit==='100g'?'100 g':'stuk'}${i.alts&&i.alts.length?' · ⇄ = andere winkel':''}</small></div>${i.alts&&i.alts.length?`<button class="sq" data-swap="${n}" aria-label="Andere winkel">⇄</button>`:''}<div class="step"><button class="sq" data-dec="${n}" aria-label="Minder">−</button><button class="sq" data-inc="${n}" aria-label="Meer">+</button></div><span class="k">${fmt(kcalOf(i))}</span><button class="x" data-rm="${n}" aria-label="Weghalen">×</button></div>`).join('')}
+  ${unknown.length?`<div class="unk">Niet herkend: <b>${unknown.map(esc).join('</b>, <b>')}</b><div class="row"><button class="btn" id="addp">Zelf als product toevoegen</button></div></div>`:''}
   ${pending.length?`<div class="row"><button class="btn red" id="add">Toevoegen · ${fmt(tot)} kcal</button><button class="btn ghost" id="clr">Wissen</button></div>`:''}</div>`;
 }
 function renderProducts(){
   const q=norm($('#ps').value.trim());
   const L=S.products.filter(p=>!q||norm(p.name+' '+(p.store||'')+' '+(p.aliases||[]).join(' ')).includes(q)).sort((a,b)=>a.name.localeCompare(b.name,'nl'));
-  $('#plist').innerHTML=L.map(p=>`<div class="pr"><button class="pe" data-edit="${esc(p.id)}"><span>${esc(p.name)}${p.store?' ('+esc(p.store)+')':''}<small>${(p.aliases||[]).length?'ook: '+esc(p.aliases.join(', ')):''}${p.est?' · geschat':''}${p.nutr?' · met voedingswaarden':''}</small></span><span class="k">${fmt(p.kcal)} <small>per ${p.unit==='100g'?'100 g':'stuk'}</small></span></button><button class="sq eat" data-eat="${esc(p.id)}" aria-label="Eet ${esc(p.name)} vandaag" title="Toevoegen aan vandaag">+</button></div>`).join('')||'<p class="empty">Geen producten gevonden.</p>';
+  $('#plist').innerHTML=L.map(p=>`<div class="pr"><button class="pe" data-edit="${esc(p.id)}"><span>${esc(p.name)}${p.store?' ('+esc(p.store)+')':''}<small>${(p.aliases||[]).length?'ook: '+esc(p.aliases.join(', ')):''}${p.nutr?' · met voedingswaarden':''}</small></span><span class="k">${fmt(p.kcal)} <small>per ${p.unit==='100g'?'100 g':'stuk'}</small></span></button><button class="sq eat" data-eat="${esc(p.id)}" aria-label="Eet ${esc(p.name)} vandaag" title="Toevoegen aan vandaag">+</button></div>`).join('')||'<p class="empty">Geen producten gevonden.</p>';
 }
-function renderKey(){$('#kstat').textContent=hasAI()?'Er is een sleutel ingesteld.':'Nog geen sleutel ingesteld.';$('#key').value=''}
 function renderAll(){renderTop();renderBon();renderWeek();renderChips();renderPrev();renderProducts();$('#goal').value=S.goal;$('#gp').value=S.mgoals.eiwit||'';$('#gf').value=S.mgoals.vet||'';$('#gc').value=S.mgoals.koolhydraten||'';
   $('#stores').innerHTML=[...new Set(S.products.map(p=>p.store).filter(Boolean))].sort().map(s=>`<option value="${esc(s)}">`).join('')}
 
@@ -346,20 +321,11 @@ $('#tundo').onclick=()=>{if(undoFn)undoFn();undoFn=null;$('#toast').hidden=true;
 function commit(){
   const k=dk(cur),L=dayList(k).slice(),time=k===today()?new Date().toTimeString().slice(0,5):'',ids=[];
   for(const i of pending){let pid=i.pid;
-    if(!pid&&i.est&&saveEst&&!S.products.some(p=>norm(p.name)===norm(i.name))){pid='p'+uid();S.products.push({id:pid,name:i.name,kcal:i.per,unit:i.unit,aliases:[],uses:0,est:true})}
     const p=S.products.find(p=>p.id===pid);if(p){p.uses=(p.uses||0)+1;p.last=Date.now()}
     const id=uid();ids.push(id);L.push({id,name:i.name,label:labelOf(i),qty:i.qty,unit:i.unit,kcal:Math.round(kcalOf(i)),m:macrosOf(i,p)||undefined,time})}
   S.days[k]=L;save();
   const n=pending.length;pending=[];unknown=[];$('#ta').value='';
   renderAll();toastMsg(`${n} ${n===1?'item':'items'} toegevoegd`,()=>{S.days[k]=dayList(k).filter(e=>!ids.includes(e.id));save()});
-}
-async function ask(){
-  const b=$('#ask');if(b){b.disabled=true;b.textContent='Claude denkt na…'}
-  const prompt='Je helpt met een Nederlandse calorieteller. Schat de calorieën van deze beschrijvingen van eten of drinken, uitgaande van gewone Nederlandse supermarkt- of snackbarporties. Antwoord ALLEEN met JSON, zonder uitleg, precies in deze vorm: {"items":[{"name":"korte productnaam in het Nederlands, enkelvoud","qty":aantal,"unit":"stuk","kcal":kcal per stuk}]}. Gebruik unit "100g" alleen als er een gewicht in gram of ml genoemd is; qty is dan het aantal gram en kcal is per 100 g. Beschrijvingen:\n'+unknown.map(u=>'- '+u).join('\n');
-  try{const v=await ai(prompt);
-    const its=(v&&Array.isArray(v.items)?v.items:[]).filter(i=>i&&i.name&&+i.kcal>0).map(i=>({pid:null,name:String(i.name).slice(0,60),unit:i.unit==='100g'?'100g':'stuk',per:Math.round(+i.kcal),qty:+i.qty>0?+i.qty:(i.unit==='100g'?100:1),est:true}));
-    if(!its.length)throw 0;pending=pending.concat(its);unknown=[];renderPrev();
-  }catch(e){renderPrev();$('#mhint').textContent=aiErr(e)}
 }
 let fNut=null,qlist=[];
 /* Zoeken in Open Food Facts (gratis, geen sleutel nodig). Op naam via cgi/search.pl, op barcode via api/v2/product. */
@@ -403,24 +369,7 @@ const setMacF=n=>{const v=n&&n.per100||{};$('#pe').value=v.eiwit??'';$('#pv').va
 function openForm(p,name){$('#qres').innerHTML='';$('#qstat').textContent='';$('#qs').value='';qlist=[];editId=p?p.id:null;$('#pft').textContent=p?'Product bewerken':'Nieuw product';$('#pn').value=p?p.name:(name||'');$('#pk').value=p?p.kcal:'';$('#pu').value=p?p.unit:'stuk';$('#pg').value=p&&p.grams?p.grams:'';$('#pa').value=p?(p.aliases||[]).join(', '):'';fNut=p&&p.nutr?p.nutr:null;setMacF(fNut);$('#pw').value=p?p.store||'':'';showNut();$('#pdel').hidden=!p;$('#pcancel').hidden=!p&&!name}
 function autoK(){const k100=fNut&&fNut.per100&&+fNut.per100.kcal,g=+$('#pg').value;if(!k100)return;if($('#pu').value==='stuk'&&g>0)$('#pk').value=Math.round(k100*g/100);else if($('#pu').value==='100g')$('#pk').value=Math.round(k100)}
 $('#pg').oninput=autoK;$('#pu').onchange=autoK;
-const shrink=f=>new Promise((ok,no)=>{const u=URL.createObjectURL(f),im=new Image();im.onload=()=>{const s=Math.min(1,1400/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>b?ok(b):no(0),'image/jpeg',.85)};im.onerror=()=>{URL.revokeObjectURL(u);no(0)};im.src=u});
 function tab(t){document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));['dag','prod','inst'].forEach(x=>$('#t-'+x).hidden=x!==t);window.scrollTo(0,0)}
-$('#pf').onchange=async e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;
-  tab('prod');openForm(null);
-  if(!hasAI()){$('#pft').textContent='Stel eerst een API-sleutel in bij Instellingen, of vul het zelf in';return}
-  $('#pft').textContent='Etiket lezen…';$('#psave').disabled=true;
-  const prompt='Dit is een foto van een verpakking of voedingsetiket. Lees de voedingswaarden af. Antwoord ALLEEN met JSON, zonder uitleg, precies in deze vorm: {"name":"korte productnaam in het Nederlands als die op de foto staat, anders lege tekst","per100":{"kcal":getal,"eiwit":gram,"koolhydraten":gram,"suikers":gram,"vet":gram,"verzadigd":gram,"vezels":gram,"zout":gram},"portie_g":gram per stuk of portie of null,"portie_kcal":kcal per stuk of portie of null}. Gebruik kcal, niet kJ. Zet null bij alles wat je niet duidelijk kunt lezen; verzin niets.';
-  try{const v=await ai(prompt,await shrink(f),'claude-sonnet-5-5');
-    const p=v&&v.per100||{},per100={};['kcal',...Object.keys(NL)].forEach(k=>{if(p[k]!=null&&isFinite(+p[k]))per100[k]=+p[k]});
-    if(!per100.kcal&&!(+v.portie_kcal))throw 0;
-    fNut={per100};setMacF(fNut);if(v.name)$('#pn').value=String(v.name).slice(0,60);
-    if(+v.portie_g>0)$('#pg').value=Math.round(+v.portie_g);
-    if(+v.portie_kcal>0){$('#pu').value='stuk';$('#pk').value=Math.round(+v.portie_kcal)}else{$('#pu').value='100g';$('#pk').value=Math.round(per100.kcal)}
-    showNut();$('#pft').textContent='Klopt het? Geef het een naam en sla op';$('#pcancel').hidden=false;
-    if(!$('#pn').value)$('#pn').focus();
-  }catch(err){$('#pft').textContent=err&&err.code?aiErr(err):'Lezen lukte niet. Probeer een scherpere foto van de tabel.'}
-  $('#psave').disabled=false};
-
 document.querySelector('.tabs').onclick=e=>{const b=e.target.closest('button');if(b)tab(b.dataset.t)};
 $('#go').onclick=run;
 $('#ta').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();run()}});
@@ -435,9 +384,7 @@ $('#prev').onclick=e=>{const t=e.target;
   else if(t.dataset.rm){pending.splice(+t.dataset.rm,1);renderPrev()}
   else if(t.id==='add')commit();
   else if(t.id==='clr'){pending=[];unknown=[];renderPrev()}
-  else if(t.id==='ask')ask();
-  else if(t.id==='addp'){const nm=unknown[0]||'';tab('prod');openForm(null,nm.replace(/^\d+([.,]\d+)?\s*/,''));$('#pk').focus()}
-  else if(t.id==='se')saveEst=t.checked};
+  else if(t.id==='addp'){const nm=unknown[0]||'';tab('prod');openForm(null,nm.replace(/^\d+([.,]\d+)?\s*/,''));$('#pk').focus()}};
 $('#ps').oninput=renderProducts;
 $('#plist').onclick=e=>{
   const eat=e.target.closest('[data-eat]');
@@ -462,12 +409,6 @@ $('#gsave').onclick=()=>{const g=Math.round(+$('#goal').value);
   $('#gstat').textContent='';S.goal=g;S.mgoals=normG({eiwit:+$('#gp').value,vet:+$('#gf').value,koolhydraten:+$('#gc').value});save();renderAll();
   $('#gsave').textContent='Opgeslagen';setTimeout(()=>$('#gsave').textContent='Opslaan',1500)};
 $('#goaledit').onclick=()=>tab('inst');
-$('#ksave').onclick=async()=>{const k=$('#key').value.trim();if(!k){$('#kstat').textContent='Plak eerst je sleutel.';return}
-  try{localStorage.setItem('kcal-key',k)}catch(e){}
-  $('#kstat').textContent='Testen…';
-  try{await ai('Antwoord alleen met {"ok":true}');$('#kstat').innerHTML='<span class="ok">Werkt. Foto’s en schattingen staan aan.</span>';$('#key').value=''}
-  catch(e){$('#kstat').textContent='Opgeslagen, maar de test lukte niet: '+aiErr(e)}};
-$('#kdel').onclick=()=>{try{localStorage.removeItem('kcal-key')}catch(e){}renderKey()};
 const backup=()=>JSON.stringify({app:'calorie-teller',v:1,goal:S.goal,mgoals:S.mgoals,products:S.products,days:S.days});
 $('#exp').onclick=()=>{try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([backup()],{type:'application/json'}));a.download='calorieteller-backup-'+today()+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)}catch(e){$('#istat').textContent='Opslaan lukte niet; gebruik Kopieer.'}};
 $('#copy').onclick=()=>{navigator.clipboard.writeText(backup()).then(()=>$('#istat').textContent='Gekopieerd. Plak het bijv. in Notities.',()=>$('#istat').textContent='Kopiëren lukte niet.')};
@@ -492,7 +433,7 @@ $('#mic').onclick=()=>{
 };
 if(!SR)$('#mhint').textContent='Typ wat je at, of tik op de microfoon van je toetsenbord en zeg het.';
 
-renderAll();renderKey();
+renderAll();
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
 </script>
